@@ -6,7 +6,7 @@ from mpclab_common.pytypes import VehicleState, VehiclePrediction
 from mpclab_common.track import get_track
 from mpclab_controllers.abstract_controller import AbstractController
 import numpy as np
-
+from numpy import load
 # The ProjectController class will be instantiated when creating the ROS node.
 class ProjectController(AbstractController):
     def __init__(self, dt: float, print_method=print):
@@ -59,6 +59,13 @@ class ProjectController(AbstractController):
         
         # Modify the vehicle state object in place to pass control inputs to the ROS node
         t = vehicle_state.t - self.t0
+
+        data = load('project_files/raceline.npz')
+        lst = data.files
+        for item in lst:
+            print("\n" + item + "\n")
+            print("\n" + data[item] + "\n")
+
 
         # Example transformation from global to Frenet frame coordinates
         s, e_y, e_psi = self.track.global_to_local((vehicle_state.x.x, vehicle_state.x.y, vehicle_state.e.psi))
