@@ -59,13 +59,19 @@ class ProjectController(AbstractController):
         
         # Modify the vehicle state object in place to pass control inputs to the ROS node
         t = vehicle_state.t - self.t0
-        accel = 0.3*np.sin(t/1*(2*np.pi)) + 0.3
-        steer = 0.2*np.sin(t/1*(2*np.pi))
-        vehicle_state.u.u_a = accel
-        vehicle_state.u.u_steer = steer
 
         # Example transformation from global to Frenet frame coordinates
         s, e_y, e_psi = self.track.global_to_local((vehicle_state.x.x, vehicle_state.x.y, vehicle_state.e.psi))
+
+        # accel = 0.3*np.sin(t/1*(2*np.pi)) + 0.3
+        # steer = 0.2*np.sin(t/1*(2*np.pi))
+
+        # P Controller
+        accel = -10*(vehicle_state.v.v_long - 1.0)
+        steer = -5*(e_y + e_psi)
+
+        vehicle_state.u.u_a = accel
+        vehicle_state.u.u_steer = steer
         
         # Example of printing
         self.print_method(f's: {s} | e_y: {e_y} | e_psi: {e_psi}')
