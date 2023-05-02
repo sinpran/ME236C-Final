@@ -110,6 +110,8 @@ class ProjectController(AbstractController):
         global e_y_ref    
         e_y_ref =self.b_prime[1]
 
+        self.integralError = 0
+
         self.psi_ref = self.b_prime[2]
 
         self.psidot_ref = self.b_prime[3]
@@ -153,7 +155,7 @@ class ProjectController(AbstractController):
         #self.print_method(f'Val: {val}')
 
         # Example transformation from global to Frenet frame coordinates
-        s, e_y, e_psi = self.track.global_to_local((vehicle_state.x.x, vehicle_state.x.y, vehicle_state.e.psi), line = 'inside')
+        s, e_y, e_psi = self.track.global_to_local((vehicle_state.x.x, vehicle_state.x.y, vehicle_state.e.psi))
         # accel = 0.3*np.sin(t/1*(2*np.pi)) + 0.3
         # steer = 0.2*np.sin(t/1*(2*np.pi))
            
@@ -164,16 +166,24 @@ class ProjectController(AbstractController):
         k_step=self.k[self.step_count]
         C_alpha = 0.9
         k_p=-.1
+        k_i = -.1
+        limit = 10
         #x_LA=.1
         #beta_ss=lr*k_step-((lf*m*vehicle_state.v.v_long**2)/(2*C_alpha*L))*k_step
 
         #steering = k_p*((e_y_ref[self.step_count]-e_y)+x_LA*((e_psi_ref[self.step_count]-e_psi)+beta_ss))+L*k_step
 
-
+        error = (e_y_ref[self.step_count]-e_y) + (e_psi_ref[self.step_count]-e_psi)
+        self.integralError += error
+        if self.integralError > limit:
+            self.integralError = limit
+        elif self.integralError < -limit:
+            self.integralError = -limit
 
         # P Controller
         accel = -1*(vehicle_state.v.v_long - 1.0)
         steer = 2*((e_y_ref[self.step_count]-e_y) + (e_psi_ref[self.step_count]-e_psi))
+        # steer = 2*(error) + k_i * self.integralError
 
         #steer=steering
 
@@ -184,11 +194,10 @@ class ProjectController(AbstractController):
         self.print_method(f's: {s} | e_y: {e_y} | e_psi: {e_psi}')
         self.print_method(f'Accel: {accel} | Steering: {steer}')
         self.print_method(f'Accel: {accel} | Steering: {steer}')
-        #self.print_method(f'Time: {t}')
-        #self.print_method(f'CALIEasldkjf;alsd jf;la: {val}')
+        self.print_method(f'STEP COUNT: {self.step_count}')
         self.step_count=self.step_count+1
-        #if(self.step_count>1401):
-            #self.step_count=0
+        # if(self.step_count>1401):
+        #     self.step_count=0
 
         return
 
