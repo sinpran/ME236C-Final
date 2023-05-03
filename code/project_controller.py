@@ -49,93 +49,22 @@ class ProjectController(AbstractController):
         for _x, _y in zip(bound_out_xy['x'], bound_out_xy['y']):
             _s, _ey, _, = self.track.global_to_local((_x, _y, 0))
             bound_out_sey.append([_s, _ey])
+        
+        self.print_method(f"starting importing")
+        self.raceline = load('raceline_v3.npz')
+        self.print_method(f"done importing") 
+        
+        self.s_ref=self.raceline['s']
+        self.e_y_ref=self.raceline['e_y']
+        self.e_psi_ref=self.raceline['e_psi']
+
+        self.function_e_y = interpolate.interp1d(self.s_ref,self.e_y_ref)
+        self.function_e_psi = interpolate.interp1d(self.s_ref,self.e_psi_ref) 
 
     # This method will be called upon starting the control loop
     def initialize(self, vehicle_state: VehicleState):
-
-        self.step_count=0
         self.t0 = vehicle_state.t
-        self.print_method(f"starting importing")
-        self.a = load('raceline.npz')
-        self.print_method(f"done importing") 
 
-        self.e_psi = self.a['e_psi']
-
-        self.e_y = self.a['e_y']
-
-        self.psi = self.a['psi']
-
-        self.psidot = self.a['psidot']
-
-        self.s =self.a['s']
-
-        self.t = self.a['t']
-
-        self.u_a = self.a['u_a']
-
-        self.u_s = self.a['u_s']
-
-        self.v_long = self.a['v_long']
-
-        self.v_tran = self.a['v_tran']
-
-        self.x = self.a['x']
-
-        self.y = self.a['y']
-
-        self.b = [self.e_psi , self.e_y,self.psi ,self.psidot,self.s ,self.t,self.u_a,self.u_s,self.v_long,self.v_tran,self.x,self.y ]
-
-        self.b_prime = []
-
-        old_time_points = np.linspace(0, 14, 1001, endpoint=False)
-
-        global new_time_points
-        new_time_points = np.linspace(0, 14, 1401, endpoint=False)   
-
-        for i in range(len(self.b)):
-
-            if new_time_points[-1] > 14 - 0.014:
-
-                new_time_points = new_time_points[:-1]
-
-            interpolator = interpolate.interp1d(old_time_points, self.b[i], kind='linear')
-
-            interpolated_data = interpolator(new_time_points)
-
-            self.b_prime.append(interpolated_data)
-
-        global e_psi_ref
-        e_psi_ref = self.b_prime[0]
-
-        global e_y_ref    
-        e_y_ref =self.b_prime[1]
-
-        self.integralError = 0
-
-        self.psi_ref = self.b_prime[2]
-
-        self.psidot_ref = self.b_prime[3]
-
-        self.s_ref = self.b_prime[4]
-
-        self.t_ref =self.b_prime[5]
-
-        self.u_a_ref = self.b_prime[6]
-
-        self.u_s_ref = self.b_prime[7]
-
-        self.v_long_ref = self.b_prime[8]
-
-        self.v_tran_ref = self.b_prime[9]
-
-        self.x_ref = self.b_prime[10]
-
-        self.y_ref = self.b_prime[11]
-        
-        self.k=[]    
-
-        for i in range(len(self.s)):
-            self.k.append(self.track.get_curvature(self.s[i]))    
 
     # This method will be called once every time step, make sure to modify the vehicle_state
     # object in place with your computed control actions for acceleration (m/s^2) and steering (rad)
@@ -143,47 +72,30 @@ class ProjectController(AbstractController):
         
         # Modify the vehicle state object in place to pass control inputs to the ROS node
         t = vehicle_state.t - self.t0
-        #self.print_method(f"step")
-        #self.print_method(f"time:{self.data['t']}")
-        #lst = data.files
-        # for item in lst:
-        #     print("\n" + item + "\n")
-        #     print("\n" + data[item] + "\n")
-        
-        #idx = np.abs(data['t'] - t).argmin()
-        #val= self.data['u_a']
-        #self.print_method(f'Val: {val}')
+
 
         # Example transformation from global to Frenet frame coordinates
         s, e_y, e_psi = self.track.global_to_local((vehicle_state.x.x, vehicle_state.x.y, vehicle_state.e.psi))
-        # accel = 0.3*np.sin(t/1*(2*np.pi)) + 0.3
-        # steer = 0.2*np.sin(t/1*(2*np.pi))
-           
+        interp_e_y=self.function_e_y(s)
+        interp_e_psi=self.function_e_psi(s)
+
         lf = 0.13
         lr = 0.13
         L = 0.37
         m = 2.2187
-        k_step=self.k[self.step_count]
+        #k_step=self.k[self.step_count]
         C_alpha = 0.9
         k_p=-.1
-        k_i = -.1
-        limit = 10
         #x_LA=.1
         #beta_ss=lr*k_step-((lf*m*vehicle_state.v.v_long**2)/(2*C_alpha*L))*k_step
 
         #steering = k_p*((e_y_ref[self.step_count]-e_y)+x_LA*((e_psi_ref[self.step_count]-e_psi)+beta_ss))+L*k_step
 
-        error = (e_y_ref[self.step_count]-e_y) + (e_psi_ref[self.step_count]-e_psi)
-        self.integralError += error
-        if self.integralError > limit:
-            self.integralError = limit
-        elif self.integralError < -limit:
-            self.integralError = -limit
+
 
         # P Controller
         accel = -1*(vehicle_state.v.v_long - 1.0)
-        steer = 2*((e_y_ref[self.step_count]-e_y) + (e_psi_ref[self.step_count]-e_psi))
-        # steer = 2*(error) + k_i * self.integralError
+        steer = -1*((e_y-interp_e_y) + (e_psi-interp_e_psi))
 
         #steer=steering
 
@@ -191,13 +103,9 @@ class ProjectController(AbstractController):
         vehicle_state.u.u_steer = steer
         
         # Example of printing
-        self.print_method(f's: {s} | e_y: {e_y} | e_psi: {e_psi}')
-        self.print_method(f'Accel: {accel} | Steering: {steer}')
-        self.print_method(f'Accel: {accel} | Steering: {steer}')
-        self.print_method(f'STEP COUNT: {self.step_count}')
-        self.step_count=self.step_count+1
-        # if(self.step_count>1401):
-        #     self.step_count=0
+        # self.print_method(f's: {s} | e_y: {e_y} | e_psi: {e_psi}')
+        # self.print_method(f'Accel: {accel} | Steering: {steer}')
+        # self.print_method(f'Accel: {accel} | Steering: {steer}')
 
         return
 
